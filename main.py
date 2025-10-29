@@ -39,14 +39,34 @@ def get_data(base_url, endpoint, data_field=None, params=None, headers=None):
         print(f"La petición ha fallado. Código de error : {e}")
         return None
 
-def build_table(data, series_key):
+def build_dynamic_table(data):
+    series_key = next((k for k in data.keys() if k.startswith("Time Series")), None)
+
+    if not series_key:
+        print("No se encontró la clave de serie temporal en la respuesta.")
+        print(list(data.keys()))
+        return None
+    
     df = pd.DataFrame.from_dict(data[series_key], orient="index")
     df.columns = [c.split(". ")[-1].split(" (")[0] for c in df.columns]
-    df.index.name = "date"
+
+    df.index.name = "datetime"
     df.reset_index(inplace=True)
+    df["datetime"] = pd.to_datetime(df["datetime"], format="%Y-%m-%d", errors="coerce")
+
+    df.sort_values(by="datetime", inplace=True)
+    for col in df.columns:
+        if col != "datetime":
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    return df
+
+def build_static_table(data):
+    df = pd.DataFrame([data["Realtime Currency Exchange Rate"]])
+    df.columns = [c.split(" ")[-1] for c in df.columns]  
     return df
     
-
+# -----------------------------------------------------------------------
 # funcion principal
 
 if __name__ == "__main__":
@@ -56,23 +76,34 @@ if __name__ == "__main__":
     base_url = config["alphavantage"]["base_url"]
     api_key = config["alphavantage"]["api_key"]
 
-    # Endpoint dinámico - cotización cripto diaria
-    params = {
+    # Endpoint dinámico - cotización cripto diaria - incremental: cada día se agrega un nuevo registro
+    print("Extracción dinámica: Precio diario de Bitcoin (BTC/USD)\n")
+
+    params_dynamic = {
         "function": "DIGITAL_CURRENCY_DAILY",
         "symbol": "BTC",
         "market": "USD",
         "apikey": api_key
     }
 
-    data = get_data(base_url, endpoint="", params=params)
+    data_dynamic = get_data(base_url, endpoint="", params=params_dynamic)
+    if data_dynamic:
+        df_dynamic = build_dynamic_table(data_dynamic)
+        print(df_dynamic.head(), "\n")
+        print("=" * 60)
 
-    if data:
-        series_key = next((k for k in data.keys() if k.startswith("Time Series")), None)
-        if series_key:
-            df = build_table(data, series_key)
 
-            print("\nExtracción exitosa. Primeras filas:\n")
-            print(df.head())
-        else:
-            print("No se encontró la clave esperada en la respuesta:")
-            print(list(data.keys()))
+    # Endpoint estático - cotización actual - extracción full: un solo valor que se reemplaza en cada ejecución
+    print("Extracción estática: Cotización actual USD/EUR\n")
+
+    params_static = {
+        "function": "CURRENCY_EXCHANGE_RATE",
+        "from_currency": "USD",
+        "to_currency": "EUR",
+        "apikey": api_key
+    }
+
+    data_static = get_data(base_url, endpoint="", params=params_static)
+    if data_static:
+        df_static = build_static_table(data_static)
+        print(df_static.head())    
