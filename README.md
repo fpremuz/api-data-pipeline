@@ -1,9 +1,10 @@
 # API Data Pipeline
 
-A small Data Engineering practice project that extracts and transforms data from the **Alpha Vantage API**, using Python and pandas.
+A Data Engineering practice project that extracts, transforms, and stores data from the **Alpha Vantage API** using **Python**, **pandas**, and **Delta Lake** (locally or in MinIO).
 
-This version focuses on **data extraction only**, demonstrating both **incremental** and **full** extractions from two different endpoints — one dynamic and one static.
+This version demonstrates both **incremental** and **full** extractions, as well as Delta Lake concepts such as **upserts**, **partitions**, **constraints**, and multi-tier data organization (**Bronze / Silver / Gold**).
 
+---
 ## Project Structure
 ```
 project/
@@ -28,18 +29,67 @@ project/
 python -m pip install -r requirements.txt
 ```
 
-### 3. Set your API key
-Create a file named .env in the project root and add your Alpha Vantage API key:
+### 3. Configure API and storage
+Create a file named pipeline.conf in the project root:
 ```
-ALPHAVANTAGE_API_KEY=your_api_key_here
+[alphavantage]
+base_url = https://www.alphavantage.co/query
+api_key = YOUR_API_KEY
+
+[minio]
+AWS_ENDPOINT_URL = http://31.97.241.212:9002
+AWS_ACCESS_KEY_ID = YOUR_ACCESS_KEY
+AWS_SECRET_ACCESS_KEY = YOUR_SECRET_KEY
+AWS_ALLOW_HTTP = true
+aws_conditional_put = etag
+AWS_S3_ALLOW_UNSAFE_RENAME = true
+bucket_name = YOUR_BUCKET
 ```
-Make sure .env is listed in .gitignore to avoid exposing your key.
+Make sure pipeline.conf is listed in .gitignore to avoid exposing your key.
+If [minio] is not provided, the script will store Delta tables locally in ./data/bronze.
 
 ### 4. Run the main script
 ```
 python main.py
 ```
 
+The script performs:
+
+Dynamic extraction (incremental) – Bitcoin daily prices (BTC/USD)
+
+Updates incrementally using Delta Lake upsert.
+
+Stored partitioned by date.
+
+Bronze → Silver → Gold data tiers.
+
+Static extraction (full) – USD/EUR exchange rate
+
+Full overwrite on each run.
+
+💾 Data Lake Tiers
+Tier	Description	Example
+```
+Bronze	Raw extracted data (incremental updates)	crypto_daily/
+Silver	Cleaned and normalized data	crypto_daily_clean/
+Gold	Aggregated or analytical data	crypto_daily_summary/
+```
+
+🧠 Notes on Extraction Types
+
+Full Extraction: The entire dataset is replaced every run (used for static data).
+
+Incremental Extraction: Only new or updated records are merged (used for dynamic data).
+
+🧰 Technologies Used
+```
+Python 3.12+
+pandas
+requests
+pyarrow
+deltalake
+configparser
+```
 ## Extracted Endpoints
 ### 1. Dynamic Endpoint (Incremental Extraction)
 
@@ -76,14 +126,6 @@ Full Extraction: The entire dataset is replaced each time, regardless of previou
 
 Incremental Extraction: Only new or updated records are added since the last extraction.
 → Used for frequently updated data (e.g., time series, logs, transactions).
-
-Technologies Used:
-```
-Python 3.12+
-pandas
-requests
-configparser
-```
 
 Example Output
 
