@@ -69,9 +69,11 @@ Full overwrite on each run.
 
 💾 Data Lake Tiers
 Tier	Description	Example
+```
 Bronze	Raw extracted data (incremental updates)	crypto_daily/
 Silver	Cleaned and normalized data	crypto_daily_clean/
 Gold	Aggregated or analytical data	crypto_daily_summary/
+```
 
 🧠 Notes on Extraction Types
 
