@@ -12,7 +12,17 @@ from deltalake.exceptions import TableNotFoundError
 # -----------------------------------------------------------------------
 # funciones auxiliares
 
+def load_config_file(filename):
+    config_path = os.path.join("config", filename)
+    if not os.path.exists(config_path):
+        print(f"No se encontró {config_path}.")
+        return None
+    parser = configparser.ConfigParser()
+    parser.read(config_path)
+    return parser
+
 def get_data(base_url, endpoint, data_field=None, params=None, headers=None):
+    # http a la API y devuelve datos en formato JSON
     try:
         endpoint_url = f"{base_url}/{endpoint}"
         response = requests.get(endpoint_url, params=params, headers=headers)
@@ -34,6 +44,7 @@ def get_data(base_url, endpoint, data_field=None, params=None, headers=None):
         return None
 
 def build_dynamic_table(data):
+    # convierte las cotizaciones en un dataframe limpio
     series_key = next((k for k in data.keys() if k.startswith("Time Series")), None)
 
     if not series_key:
@@ -53,23 +64,54 @@ def build_dynamic_table(data):
         if col != "datetime":
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
+    # particion por fecha
     df["date"] = df["datetime"].dt.date.astype(str)
 
     return df
 
 def build_static_table(data):
-    df = pd.DataFrame([data["Realtime Currency Exchange Rate"]])
-    df.columns = [c.split(" ")[-1] for c in df.columns]  
+    # convierte datos estaticos en dataframe
+    # extrae el diccionario principal
+    rate = data["Realtime Currency Exchange Rate"]
+
+    # Convierte en DataFrame
+    df = pd.DataFrame([rate])
+
+    # Normaliza nombres de columnas automáticamente (sino el codigo falla porque aparecen nombres duplicados)
+    new_columns = []
+    seen = set()
+
+    for c in df.columns:
+        parts = c.split(" ")[1:]  # remueve el número y punto
+        col_name = "_".join(parts).lower()  # une con _
+        
+        # Si el nombre ya existe, agrega un sufijo numérico
+        base_name = col_name
+        counter = 1
+        while col_name in seen:
+            col_name = f"{base_name}_{counter}"
+            counter += 1
+
+        seen.add(col_name)
+        new_columns.append(col_name)
+
+    df.columns = new_columns
     return df
 
-def save_data_as_delta(df, path, storage_options=None, mode="overwrite", partition_cols=None):   
+def save_data_as_delta(df, path, storage_options=None, mode="overwrite", partition_cols=None):  
+    # guarda los datos en formato delta lake 
     write_deltalake(
-        path, df, mode=mode, storage_options=storage_options, partition_by=partition_cols
+        path,
+        df,
+        mode=mode,
+        storage_options=storage_options,
+        partition_by=partition_cols
     )
 
 def upsert_data_as_delta(data, data_path, predicate, storage_options=None, partition_cols=None):
+    # inserta nuevos datos o actualiza registros existentes
     try:
-        dt = DeltaTable(data_path)
+        dt = DeltaTable(data_path, storage_options=storage_options)
         data_pa = pa.Table.from_pandas(data)
         dt.merge(
             source=data_pa,
@@ -87,32 +129,40 @@ def upsert_data_as_delta(data, data_path, predicate, storage_options=None, parti
 # funcion principal
 
 if __name__ == "__main__":
-    config = configparser.ConfigParser()
-    config.read("pipeline.conf")
+    api_config = load_config_file("api.conf")
+    if not api_config or "alphavantage" not in api_config:
+        raise FileNotFoundError(
+            "Falta la configuracion de la API. Crear 'config/api.conf' con las credenciales de AlphaVantage."
+        )
 
-    base_url = config["alphavantage"]["base_url"]
-    api_key = config["alphavantage"]["api_key"]
+    base_url = api_config["alphavantage"]["base_url"]
+    api_key = api_config["alphavantage"]["api_key"]
 
-# Antes de ejecutar el script `main.py`, asegurarse de tener el archivo `pipeline.conf`
-#  en la raíz del proyecto con el siguiente formato:
+    # Antes de ejecutar el script `main.py`, asegurarse de tener el archivo config/api.conf con las credenciales de alphavantage
+    # y el archivo config/storage.conf en la raíz del proyecto con el siguiente formato: 
 
-# [alphavantage]
-# base_url = https://www.alphavantage.co/query
-# api_key = API_KEY
+    # [alphavantage]
+    # base_url = https://www.alphavantage.co/query
+    # api_key = API_KEY
 
-# [minio]
-# AWS_ENDPOINT_URL = http://31.97.241.212:9002
-# AWS_ACCESS_KEY_ID = ACCESS_KEY
-# AWS_SECRET_ACCESS_KEY = SECRET_KEY
-# AWS_ALLOW_HTTP = true
-# aws_conditional_put = etag
-# AWS_S3_ALLOW_UNSAFE_RENAME = true
-# bucket_name = BUCKET
+    # [minio]
+    # AWS_ENDPOINT_URL = ENDPOINT_URL
+    # AWS_ACCESS_KEY_ID = ACCESS_KEY
+    # AWS_SECRET_ACCESS_KEY = SECRET_KEY
+    # AWS_ALLOW_HTTP = true
+    # aws_conditional_put = etag
+    # AWS_S3_ALLOW_UNSAFE_RENAME = true
+    # bucket_name = BUCKET
 
+    # sino, el data lake se crea de manera local 
 
-    if "minio" in config:
+    # cargar configuracion de almacenamiento (minio o local)
+    storage_config = load_config_file("storage.conf")
+    storage_options = None
+
+    if storage_config and "minio" in storage_config:
         print("Usando almacenamiento en MinIO\n")
-        minio = config["minio"]
+        minio = storage_config["minio"]
         storage_options = {
             "AWS_ENDPOINT_URL": minio["AWS_ENDPOINT_URL"],
             "AWS_ACCESS_KEY_ID": minio["AWS_ACCESS_KEY_ID"],
@@ -121,14 +171,12 @@ if __name__ == "__main__":
             "aws_conditional_put": minio["aws_conditional_put"],
             "AWS_S3_ALLOW_UNSAFE_RENAME": minio["AWS_S3_ALLOW_UNSAFE_RENAME"]
         }
-        bkt_name = minio["bucket_name"]
-        base_path = f"s3://{bkt_name}/bronze"
+        bucket_name = minio["bucket_name"]
+        base_path = f"s3://{bucket_name}/bronze"
     else:
-        print("No se encontró configuración de MinIO → usando almacenamiento local\n")
-        storage_options = None
+        print("Usando almacenamiento local\n")
         base_path = "./data/bronze"
-
-    os.makedirs(base_path, exist_ok=True)
+        os.makedirs(base_path, exist_ok=True)
 
     # Endpoint dinámico - cotización cripto diaria - incremental: cada día se agrega un nuevo registro
     print("Extracción dinámica: Precio diario de Bitcoin (BTC/USD)\n")
@@ -159,7 +207,7 @@ if __name__ == "__main__":
         print("=" * 60)
 
 
-    # Endpoint estático - cotización actual - extracción full: un solo valor que se reemplaza en cada ejecución
+    # Endpoint estático - cotización actual - extracción full overwrite: un solo valor que se reemplaza en cada ejecución
     print("Extracción estática: Cotización actual USD/EUR\n")
 
     params_static = {
