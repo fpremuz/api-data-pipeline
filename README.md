@@ -2,7 +2,7 @@
 
 A Data Engineering practice project that extracts, transforms, and stores data from the **Alpha Vantage API** using **Python**, **pandas**, and **Delta Lake** (locally or in MinIO).
 
-This version demonstrates both **incremental** and **full** extractions, as well as Delta Lake concepts such as **upserts**, **partitions**, **constraints**, and multi-tier data organization (**Bronze / Silver / Gold**).
+It demonstrates **incremental (dynamic)** and **full-overwrite (static)** ingestion, **schema evolution**, **Z-Ordering**, **compaction**, and **time travel**.
 
 ---
 ## Project Structure
@@ -16,6 +16,10 @@ project/
 ├── config/
 │   ├── api.conf      # Alpha Vantage API configuration
 │   └── storage.conf  # MinIO storage configuration
+│
+├── data/                # Local Delta Lake (if MinIO not configured)
+│   └── bronze/
+│
 └── README.md # Documentation
 ```
 
@@ -63,17 +67,36 @@ python main.py
 
 The script performs:
 
-Dynamic extraction (incremental) – Bitcoin daily prices (BTC/USD)
+**Dynamic extraction (incremental) – Bitcoin daily prices (BTC/USD)**
+
+Loads historical prices for Bitcoin
 
 Updates incrementally using Delta Lake upsert.
 
+Automatically creates the table schema if it doesn’t exist
+
+Adds constraint: close > 0
+
 Stored partitioned by date.
 
-Bronze → Silver → Gold data tiers.
+**Static extraction (full overwrite) – USD/EUR exchange rate**
 
-Static extraction (full) – USD/EUR exchange rate
+Automatically creates the table schema if it doesn’t exist
 
-Full overwrite on each run.
+Removes duplicated columns before writing
+
+
+🧱 Delta Lake Operations
+
+Each ingestion step performs:
+
+Schema evolution: automatically adapts to new columns
+
+Compaction: merges small files for better performance
+
+Z-Ordering: optimizes data skipping by sorting on the date column
+
+Version tracking & time travel
 
 💾 Data Lake Tiers
 Tier	Description	Example
