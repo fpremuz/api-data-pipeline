@@ -13,15 +13,20 @@ project/
 ├── requirements.txt # Project dependencies
 ├── .gitignore # Files ignored by Git
 ├── venv/ # Virtual environment (not included in Git)
+├── config/
+│   ├── api.conf      # Alpha Vantage API configuration
+│   └── storage.conf  # MinIO storage configuration
 └── README.md # Documentation
 ```
 
 ## Setup Instructions
 
-### 1. Activate the virtual environment
+### 1. Create and activate the virtual environment
 
 ```bash
-.\venv\Scripts\activate
+python -m venv venv
+.\venv\Scripts\activate     # Windows
+source venv/bin/activate    # Linux/macOS
 ```
 
 ### 2. Install dependencies
@@ -30,12 +35,15 @@ python -m pip install -r requirements.txt
 ```
 
 ### 3. Configure API and storage
-Create a file named pipeline.conf in the project root:
+Create a file named api.conf in a config folder:
+config/api.conf
 ```
 [alphavantage]
 base_url = https://www.alphavantage.co/query
 api_key = YOUR_API_KEY
-
+```
+config/storage.conf:
+```
 [minio]
 AWS_ENDPOINT_URL = http://31.97.241.212:9002
 AWS_ACCESS_KEY_ID = YOUR_ACCESS_KEY
@@ -45,8 +53,8 @@ aws_conditional_put = etag
 AWS_S3_ALLOW_UNSAFE_RENAME = true
 bucket_name = YOUR_BUCKET
 ```
-Make sure pipeline.conf is listed in .gitignore to avoid exposing your key.
-If [minio] is not provided, the script will store Delta tables locally in ./data/bronze.
+Make sure the config folder is listed in .gitignore to avoid exposing your keys.
+If config/storage.conf is not provided, the script will store Delta tables locally in ./data/bronze.
 
 ### 4. Run the main script
 ```
@@ -81,6 +89,24 @@ Full Extraction: The entire dataset is replaced every run (used for static data)
 
 Incremental Extraction: Only new or updated records are merged (used for dynamic data).
 
+🧩 Features
+
+Extracts two API endpoints:
+
+Dynamic (incremental) → Bitcoin daily prices (DIGITAL_CURRENCY_DAILY)
+
+Static (full overwrite) → USD/EUR exchange rate (CURRENCY_EXCHANGE_RATE)
+
+Cleans and normalizes data automatically.
+
+Writes in Delta Lake format with partitioning.
+
+Supports both local and MinIO S3-compatible storage.
+
+Ensures idempotency — re-running the pipeline won’t duplicate records.
+
+Adds data constraints (e.g. close > 0 for valid prices).
+
 🧰 Technologies Used
 ```
 Python 3.12+
@@ -90,6 +116,20 @@ pyarrow
 deltalake
 configparser
 ```
+
+🧠 Concepts Practiced
+
+Data Extraction (API)
+
+Incremental vs Full Loads
+
+Medallion Architecture (Bronze / Silver / Gold)
+
+Delta Lake and ACID tables
+
+Data validation and constraints
+
+Configuration-driven pipelines
 ## Extracted Endpoints
 ### 1. Dynamic Endpoint (Incremental Extraction)
 
@@ -140,4 +180,16 @@ Static Extraction: USD/EUR Exchange Rate
 | Code | Name | Code | Name | Rate | Refreshed | Zone |
 |------|------|------|------|------|-----------|------|
 | USD  | ...  | EUR  | ...  | ...  | ...       | UTC  |
+```
+
+🧹 .gitignore
+
+Make sure sensitive files and virtual environments are excluded:
+```
+venv/
+config/
+__pycache__/
+*.pyc
+*.log
+*.tmp
 ```
