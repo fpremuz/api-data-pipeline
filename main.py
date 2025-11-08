@@ -214,22 +214,23 @@ if __name__ == "__main__":
         predicate = "target.datetime = source.datetime"
 
         try:
-            DeltaTable(data_path_dynamic, storage_options=storage_options)
+            dt = DeltaTable(data_path_dynamic, storage_options=storage_options)
+            # Si la tabla ya existe, hago UPSERT (merge)
+            data_pa = pa.Table.from_pandas(df_dynamic)
+            dt.merge(
+                source=data_pa,
+                source_alias="source",
+                target_alias="target",
+                predicate="target.datetime = source.datetime"
+            ) \
+            .when_matched_update_all() \
+            .when_not_matched_insert_all() \
+            .execute()
+            print("Tabla Delta actualizada (UPSERT completado).")
         except TableNotFoundError:
-            # creo la estructura vacia y la particion (date)
-            schema = pa.schema([
-                pa.field("datetime", pa.timestamp("s")),
-                pa.field("open", pa.float64()),
-                pa.field("high", pa.float64()),
-                pa.field("low", pa.float64()),
-                pa.field("close", pa.float64()),
-                pa.field("volume", pa.float64()),
-                pa.field("date", pa.string()),
-            ])
             write_deltalake(
                 data_path_dynamic,
-                pd.DataFrame(columns=[f.name for f in schema]),
-                schema=schema,
+                df_dynamic,
                 mode="overwrite",
                 storage_options=storage_options,
                 partition_by=["date"],
@@ -241,7 +242,6 @@ if __name__ == "__main__":
                 data_path_dynamic,
                 df_dynamic,
                 mode="merge",
-                merge_schema=True,  # habilita schema evolution
                 storage_options=storage_options,
                 partition_by=["date"]
             )
@@ -266,7 +266,7 @@ if __name__ == "__main__":
                 print("\nEjecutando limpieza de archivos antiguos (Vacuum)...")
                 dt.vacuum(retention_hours=24, dry_run=False, enforce_retention_duration=False, storage_options=storage_options)
                 print("Vacuum completado.\n")
-            except Exception:
+            except Exception as e:
                 print("Mantenimiento omitido:", e)
 
         print("Datos dinámicos guardados.\n")
