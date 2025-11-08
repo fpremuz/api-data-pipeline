@@ -11,9 +11,10 @@ from deltalake.exceptions import TableNotFoundError
 
 # -----------------------------------------------------------------------
 # funciones auxiliares
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def load_config_file(filename):
-    config_path = os.path.join("config", filename)
+    config_path = os.path.join(BASE_DIR, "config", filename)
     if not os.path.exists(config_path):
         print(f"No se encontró {config_path}.")
         return None
