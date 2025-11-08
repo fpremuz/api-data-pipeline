@@ -8,12 +8,14 @@ import configparser
 from datetime import datetime, timedelta
 from deltalake import write_deltalake, DeltaTable
 from deltalake.exceptions import TableNotFoundError
+from deltalake.table import TableOptimizer
 
 # -----------------------------------------------------------------------
 # funciones auxiliares
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def load_config_file(filename):
+    # Carga un archivo .conf desde la carpeta config/
     config_path = os.path.join(BASE_DIR, "config", filename)
     if not os.path.exists(config_path):
         print(f"No se encontró {config_path}.")
@@ -126,6 +128,20 @@ def upsert_data_as_delta(data, data_path, predicate, storage_options=None, parti
     except TableNotFoundError:
         save_data_as_delta(data, data_path, storage_options, "overwrite", partition_cols)
     
+
+def remove_duplicate_columns(df):
+    # Elimina columnas duplicadas automáticamente
+    seen = set()
+    new_cols = []
+    for c in df.columns:
+        if c not in seen:
+            new_cols.append(c)
+            seen.add(c)
+        else:
+            new_cols.append(f"{c}_dup")
+    df.columns = new_cols
+    return df
+
 # -----------------------------------------------------------------------
 # funcion principal
 
@@ -197,12 +213,59 @@ if __name__ == "__main__":
         data_path_dynamic = f"{base_path}/crypto_daily"
         predicate = "target.datetime = source.datetime"
 
-        upsert_data_as_delta(df_dynamic, data_path_dynamic, predicate, storage_options, partition_cols=["date"])
         try:
-            dt = DeltaTable(data_path_dynamic, storage_options=storage_options)
-            dt.alter.add_constraint({"positive_close": "close > 0"})
-        except Exception:
-            pass
+            DeltaTable(data_path_dynamic, storage_options=storage_options)
+        except TableNotFoundError:
+            schema = pa.schema([
+                pa.field("datetime", pa.timestamp("s")),
+                pa.field("open", pa.float64()),
+                pa.field("high", pa.float64()),
+                pa.field("low", pa.float64()),
+                pa.field("close", pa.float64()),
+                pa.field("volume", pa.float64()),
+                pa.field("date", pa.string()),
+            ])
+            write_deltalake(
+                data_path_dynamic,
+                pd.DataFrame(columns=[f.name for f in schema]),
+                schema=schema,
+                mode="overwrite",
+                storage_options=storage_options,
+                partition_by=["date"],
+            )
+            print("Tabla Delta inicializada (estructura vacía creada).")
+
+            write_deltalake(
+                data_path_dynamic,
+                df_dynamic,
+                mode="merge",
+                merge_schema=True,  # habilita schema evolution
+                storage_options=storage_options,
+                partition_by=["date"]
+            )
+
+            try:
+                dt = DeltaTable(data_path_dynamic, storage_options=storage_options)
+                dt.alter.add_constraint({"positive_close": "close > 0"})
+
+                # Z-Order + Compactación
+                print("Optimizando tabla Delta (compactación + Z-Order)")
+                optimizer = TableOptimizer(dt)
+                optimizer.compact(z_order=["date"])
+                print("Optimización completada.\n")
+
+                # === Time Travel ===
+                last_version = dt.version()
+                print(f"Versión actual de la tabla: {last_version}")
+                print("Historial de versiones recientes:")
+                print(dt.history(3))  # últimas 3 versiones
+
+                # === Vacuum ===
+                print("\nEjecutando limpieza de archivos antiguos (Vacuum)...")
+                dt.vacuum(retention_hours=24, dry_run=False, enforce_retention_duration=False, storage_options=storage_options)
+                print("Vacuum completado.\n")
+            except Exception:
+                print("Mantenimiento omitido:", e)
 
         print("Datos dinámicos guardados.\n")
         print("=" * 60)
@@ -221,6 +284,7 @@ if __name__ == "__main__":
     data_static = get_data(base_url, endpoint="", params=params_static)
     if data_static:
         df_static = build_static_table(data_static)
+        df_static = remove_duplicate_columns(df_static)
         print(df_static.head())   
 
         data_path_static = f"{base_path}/exchange_rate"
