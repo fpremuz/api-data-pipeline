@@ -216,6 +216,7 @@ if __name__ == "__main__":
         try:
             DeltaTable(data_path_dynamic, storage_options=storage_options)
         except TableNotFoundError:
+            # creo la estructura vacia y la particion (date)
             schema = pa.schema([
                 pa.field("datetime", pa.timestamp("s")),
                 pa.field("open", pa.float64()),
@@ -235,6 +236,7 @@ if __name__ == "__main__":
             )
             print("Tabla Delta inicializada (estructura vacía creada).")
 
+            # agrego los datos de la API
             write_deltalake(
                 data_path_dynamic,
                 df_dynamic,
