@@ -195,7 +195,9 @@ if __name__ == "__main__":
         base_path = "./data/bronze"
         os.makedirs(base_path, exist_ok=True)
 
+    # CAPA BRONZE
     # Endpoint dinámico - cotización cripto diaria - incremental: cada día se agrega un nuevo registro
+    print("Capa BRONZE\n")
     print("Extracción dinámica: Precio diario de Bitcoin (BTC/USD)\n")
 
     params_dynamic = {
@@ -211,7 +213,6 @@ if __name__ == "__main__":
         print(df_dynamic.head(), "\n")
 
         data_path_dynamic = f"{base_path}/crypto_daily"
-        predicate = "target.datetime = source.datetime"
 
         try:
             dt = DeltaTable(data_path_dynamic, storage_options=storage_options)
@@ -222,10 +223,7 @@ if __name__ == "__main__":
                 source_alias="source",
                 target_alias="target",
                 predicate="target.datetime = source.datetime"
-            ) \
-            .when_matched_update_all() \
-            .when_not_matched_insert_all() \
-            .execute()
+            ).when_matched_update_all().when_not_matched_insert_all().execute()
             print("Tabla Delta actualizada (UPSERT completado).")
         except TableNotFoundError:
             write_deltalake(
@@ -294,3 +292,86 @@ if __name__ == "__main__":
 
         print("Datos estáticos guardados.\n")
         print("=" * 60) 
+
+    # CAPA SILVER
+    print("Capa SILVER\n")
+
+    # Limpieza de cripto
+    silver_crypto_path = base_path.replace("bronze", "silver") + "/crypto_daily_clean"
+    try:
+        dt_crypto_bronze = DeltaTable(f"{base_path}/crypto_daily", storage_options=storage_options)
+        df_crypto_bronze = dt_crypto_bronze.to_pandas()
+        df_crypto_silver = df_crypto_bronze.dropna() #remuevo filas vacias
+        df_crypto_silver = df_crypto_silver[df_crypto_silver["close"] > 0] #constraint
+
+        write_deltalake(
+            silver_crypto_path,
+            df_crypto_silver,
+            mode="overwrite",
+            schema_mode="merge",
+            storage_options=storage_options,
+            partition_by=["date"]
+        )
+        print("Tabla SILVER (crypto) creada exitosamente.\n")
+        print(df_crypto_silver.head(), "\n")
+    except Exception as e:
+        print("Error creando tabla Silver de crypto:", e)
+
+    # Limpieza de tipo de cambio
+    silver_fx_path = base_path.replace("bronze", "silver") + "/exchange_rate_clean"
+    try:
+        dt_fx_bronze = DeltaTable(f"{base_path}/exchange_rate", storage_options=storage_options)
+        df_fx_bronze = dt_fx_bronze.to_pandas()
+        df_fx_silver = df_fx_bronze.loc[:, ~df_fx_bronze.columns.duplicated()]
+
+        write_deltalake(
+            silver_fx_path,
+            df_fx_silver,
+            mode="overwrite",
+            schema_mode="merge",
+            storage_options=storage_options
+        )
+        print("Tabla SILVER (exchange rate) creada exitosamente.\n")
+        print(df_fx_silver.head(), "\n")
+    except Exception as e:
+        print("Error creando tabla Silver de exchange rate:", e)
+
+    # CAPA GOLD
+    print("Capa Gold\n")
+
+    gold_crypto_path = base_path.replace("bronze", "gold") + "/crypto_monthly_summary"
+    try:
+        df_crypto_silver["month"] = pd.to_datetime(df_crypto_silver["date"]).dt.to_period("M").astype(str)
+        df_crypto_gold = (
+            df_crypto_silver.groupby("month", as_index=False)
+            .agg(avg_close=("close", "mean"), max_close=("close", "max"), min_close=("close", "min"))
+        )
+
+        write_deltalake(
+            gold_crypto_path,
+            df_crypto_gold,
+            mode="overwrite",
+            schema_mode="merge",
+            storage_options=storage_options
+        )
+        print("Tabla GOLD (resumen mensual de crypto) creada exitosamente.\n")
+        print(df_crypto_gold.head(), "\n")
+    except Exception as e:
+        print("Error creando tabla Gold de crypto:", e)
+
+    gold_fx_path = base_path.replace("bronze", "gold") + "/exchange_rate_latest"
+    try:
+        df_fx_gold = df_fx_silver.sort_values(by="last_refreshed", ascending=False).head(1)
+        write_deltalake(
+            gold_fx_path,
+            df_fx_gold,
+            mode="overwrite",
+            schema_mode="merge",
+            storage_options=storage_options
+        )
+        print("Tabla GOLD (último tipo de cambio) creada exitosamente.\n")
+        print(df_fx_gold.head(), "\n")
+    except Exception as e:
+        print("Error creando tabla Gold de exchange rate:", e)
+
+    print("Pipeline completado exitosamente")
