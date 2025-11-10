@@ -2,7 +2,7 @@
 
 A Data Engineering practice project that extracts, transforms, and stores data from the **Alpha Vantage API** using **Python**, **pandas**, and **Delta Lake** (locally or in MinIO).
 
-It demonstrates **incremental (dynamic)** and **full-overwrite (static)** ingestion, **schema evolution**, **Z-Ordering**, **compaction**, and **time travel**.
+It demonstrates **incremental (dynamic)** and **full-overwrite (static)** ingestion, **schema evolution**, **Z-Ordering**, **compaction**, **time travel** and a full **Medallion Architecture (Bronze → Silver → Gold)**.
 
 ---
 ## Project Structure
@@ -19,6 +19,8 @@ project/
 │
 ├── data/                # Local Delta Lake (if MinIO not configured)
 │   └── bronze/
+│   ├── silver/
+│   └── gold/
 │
 └── README.md # Documentation
 ```
@@ -106,6 +108,20 @@ Silver	Cleaned and normalized data	crypto_daily_clean/
 Gold	Aggregated or analytical data	crypto_daily_summary/
 ```
 
+🧩 Silver Layer (Data Cleansing)
+
+Removes null values and invalid records
+
+Keeps only valid prices (close > 0)
+
+Deduplicates columns for static data
+
+🪙 Gold Layer (Aggregation)
+
+Aggregates monthly Bitcoin statistics (avg, max, min close)
+
+Keeps the latest USD/EUR exchange rate snapshot
+
 🧠 Notes on Extraction Types
 
 Full Extraction: The entire dataset is replaced every run (used for static data).
@@ -129,6 +145,8 @@ Supports both local and MinIO S3-compatible storage.
 Ensures idempotency — re-running the pipeline won’t duplicate records.
 
 Adds data constraints (e.g. close > 0 for valid prices).
+
+Implements Bronze → Silver → Gold pipeline
 
 🧰 Technologies Used
 ```
