@@ -21,6 +21,10 @@ project/
 │   └── bronze/
 │   ├── silver/
 │   └── gold/
+|
+├── maintenance/             # NEW — maintenance scripts
+│   ├── vacuum_tables.py
+│   └── optimize_tables.py
 │
 └── README.md # Documentation
 ```
@@ -60,7 +64,7 @@ AWS_S3_ALLOW_UNSAFE_RENAME = true
 bucket_name = YOUR_BUCKET
 ```
 Make sure the config folder is listed in .gitignore to avoid exposing your keys.
-If config/storage.conf is not provided, the script will store Delta tables locally in ./data/bronze.
+If config/storage.conf is not provided, the script will store Delta tables locally in ./data/bronze, ./data/silver, ./data/gold.
 
 ### 4. Run the main script
 ```
@@ -127,6 +131,44 @@ Keeps the latest USD/EUR exchange rate snapshot
 Full Extraction: The entire dataset is replaced every run (used for static data).
 
 Incremental Extraction: Only new or updated records are merged (used for dynamic data).
+
+🔧 Maintenance Scripts (VACUUM / OPTIMIZE)
+
+Delta Lake maintenance must run separately from data ingestion.
+This is why we store them in:
+```
+maintenance/
+  vacuum_tables.py
+  optimize_tables.py
+```
+Why separate these scripts?
+
+Because:
+
+ETL should not trigger heavy operations like VACUUM or OPTIMIZE
+
+These tasks are often scheduled (e.g., weekly, nightly)
+
+They may run on different hardware
+
+They rewrite files and could interfere with ingestion
+
+Script 1 — vacuum_tables.py
+
+Performs:
+
+Remove old files beyond retention threshold
+
+Cleanup unused files after merges
+
+Improve lake hygiene
+Script 2 — optimize_tables.py
+
+Performs:
+
+File compaction
+
+Z-Ordering (date) for skipping optimization
 
 🧩 Features
 
