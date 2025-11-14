@@ -92,7 +92,7 @@ Automatically creates the table schema if it doesn’t exist
 Removes duplicated columns before writing
 
 
-🧱 Delta Lake Operations
+🧱 **Delta Lake Operations**
 
 Each ingestion step performs:
 
@@ -104,7 +104,7 @@ Z-Ordering: optimizes data skipping by sorting on the date column
 
 Version tracking & time travel
 
-💾 Data Lake Tiers
+💾 **Data Lake Tiers**
 Tier	Description	Example
 ```
 Bronze	Raw extracted data (incremental updates)	crypto_daily/
@@ -112,7 +112,7 @@ Silver	Cleaned and normalized data	crypto_daily_clean/
 Gold	Aggregated or analytical data	crypto_daily_summary/
 ```
 
-🧩 Silver Layer (Data Cleansing)
+🧩 **Silver Layer (Data Cleansing)**
 
 Removes null values and invalid records
 
@@ -120,19 +120,19 @@ Keeps only valid prices (close > 0)
 
 Deduplicates columns for static data
 
-🪙 Gold Layer (Aggregation)
+🪙 **Gold Layer (Aggregation)**
 
 Aggregates monthly Bitcoin statistics (avg, max, min close)
 
 Keeps the latest USD/EUR exchange rate snapshot
 
-🧠 Notes on Extraction Types
+🧠 **Notes on Extraction Types**
 
 Full Extraction: The entire dataset is replaced every run (used for static data).
 
 Incremental Extraction: Only new or updated records are merged (used for dynamic data).
 
-🔧 Maintenance Scripts (VACUUM / OPTIMIZE)
+🔧 **Maintenance Scripts (VACUUM / OPTIMIZE)**
 
 Delta Lake maintenance must run separately from data ingestion.
 This is why we store them in:
@@ -170,7 +170,7 @@ File compaction
 
 Z-Ordering (date) for skipping optimization
 
-🧩 Features
+🧩 **Features**
 
 Extracts two API endpoints:
 
@@ -190,7 +190,7 @@ Adds data constraints (e.g. close > 0 for valid prices).
 
 Implements Bronze → Silver → Gold pipeline
 
-🧰 Technologies Used
+🧰 **Technologies Used**
 ```
 Python 3.12+
 pandas
@@ -200,7 +200,7 @@ deltalake
 configparser
 ```
 
-🧠 Concepts Practiced
+🧠 **Concepts Practiced**
 
 Data Extraction (API)
 
