@@ -58,6 +58,9 @@ def load_config_file(filename):
     parser.read(config_path)
     return parser
 
+def s3_join(*parts):
+    return "/".join([p.strip("/") for p in parts])
+
 # extract
 def get_data(base_url, params=None, headers=None):
     # http a la API y devuelve datos en formato JSON
@@ -263,7 +266,7 @@ if __name__ == "__main__":
         else:
             print(df_dynamic.head(), "\n")
 
-            data_path_dynamic = os.path.join(bronze_root, "crypto_daily")
+            data_path_dynamic = s3_join(bronze_root, "crypto_daily")
 
             upsert_data_as_delta(
                 df_dynamic,
@@ -297,7 +300,7 @@ if __name__ == "__main__":
             df_static = remove_duplicate_columns(df_static)
             print(df_static.head())   
 
-            data_path_static = os.path.join(bronze_root, "exchange_rate")
+            data_path_static = s3_join(bronze_root, "exchange_rate")
             save_data_as_delta(df_static, data_path_static, storage_options, mode="overwrite")
 
             print("Datos estáticos guardados.\n")
@@ -310,9 +313,9 @@ if __name__ == "__main__":
     print("Capa SILVER\n")
 
     # Limpieza de cripto
-    silver_crypto_path = os.path.join(silver_root, "crypto_daily_clean")
+    silver_crypto_path = s3_join(silver_root, "crypto_daily_clean")
     try:
-        dt_crypto_bronze = DeltaTable(os.path.join(bronze_root, "crypto_daily"), storage_options=storage_options)
+        dt_crypto_bronze = DeltaTable(s3_join(bronze_root, "crypto_daily"), storage_options=storage_options)
         df_crypto_bronze = dt_crypto_bronze.to_pandas()
         df_crypto_silver = df_crypto_bronze.dropna() #remuevo filas vacias
         df_crypto_silver = df_crypto_silver[df_crypto_silver["close"] > 0] #constraint
@@ -331,9 +334,9 @@ if __name__ == "__main__":
         print("Error creando tabla Silver de crypto:", e)
 
     # Limpieza de tipo de cambio
-    silver_fx_path = os.path.join(silver_root, "exchange_rate_clean")
+    silver_fx_path = s3_join(silver_root, "exchange_rate_clean")
     try:
-        dt_fx_bronze = DeltaTable(os.path.join(bronze_root, "exchange_rate"), storage_options=storage_options)
+        dt_fx_bronze = DeltaTable(s3_join(bronze_root, "exchange_rate"), storage_options=storage_options)
         df_fx_bronze = dt_fx_bronze.to_pandas()
         df_fx_silver = df_fx_bronze.loc[:, ~df_fx_bronze.columns.duplicated()]
 
@@ -352,7 +355,7 @@ if __name__ == "__main__":
     # CAPA GOLD
     print("Capa Gold\n")
 
-    gold_crypto_path = os.path.join(gold_root, "crypto_monthly_summary")
+    gold_crypto_path = s3_join(gold_root, "crypto_monthly_summary")
     try:
         df_crypto_silver["month"] = pd.to_datetime(df_crypto_silver["date"]).dt.to_period("M").astype(str)
         df_crypto_gold = (
@@ -372,7 +375,7 @@ if __name__ == "__main__":
     except Exception as e:
         print("Error creando tabla Gold de crypto:", e)
 
-    gold_fx_path = os.path.join(gold_root, "exchange_rate_latest")
+    gold_fx_path = s3_join(gold_root, "exchange_rate_latest")
     try:
         df_fx_gold = df_fx_silver.sort_values(by="last_refreshed", ascending=False).head(1)
         write_deltalake(
