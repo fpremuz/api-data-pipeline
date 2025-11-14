@@ -145,30 +145,31 @@ Why separate these scripts?
 
 Because:
 
-ETL should not trigger heavy operations like VACUUM or OPTIMIZE
+* ETL should not trigger heavy operations like VACUUM or OPTIMIZE
 
-These tasks are often scheduled (e.g., weekly, nightly)
+* These tasks are often scheduled (e.g., weekly, nightly)
 
-They may run on different hardware
+* They may run on different hardware
 
-They rewrite files and could interfere with ingestion
+* They rewrite files and could interfere with ingestion
 
-Script 1 — vacuum_tables.py
-
-Performs:
-
-Remove old files beyond retention threshold
-
-Cleanup unused files after merges
-
-Improve lake hygiene
-Script 2 — optimize_tables.py
+*Script 1 — vacuum_tables.py*
 
 Performs:
 
-File compaction
+- Remove old files beyond retention threshold
 
-Z-Ordering (date) for skipping optimization
+- Cleanup unused files after merges
+
+- Improve lake hygiene
+
+*Script 2 — optimize_tables.py*
+
+Performs:
+
+- File compaction
+
+- Z-Ordering (date) for skipping optimization
 
 🧩 **Features**
 
