@@ -1,5 +1,5 @@
 """
-Trabajo Práctico – Data Engineering
+Trabajo Práctico - Data Engineering
 ----------------------------------
 
 Sistema origen: AlphaVantage API (https://www.alphavantage.co/documentation)
