@@ -277,3 +277,60 @@ __pycache__/
 *.log
 *.tmp
 ```
+
+📌 About TP1 and TP2 in This Project
+
+Although the original assignment separates the work into TP1 and TP2, this repository implements both parts inside a single end-to-end pipeline.
+
+**TP1 – Data Extraction and Bronze Layer**
+
+TP1 covers all the ingestion logic, and includes:
+
+- Dynamic extraction (e.g., daily Bitcoin price)
+
+- Static extraction (e.g., FX rate USD/EUR)
+
+- Normalization and schema alignment before storage
+
+- Writing raw standardized data into the Bronze Delta Lake layer
+
+**TP2 – Cleaning, Transformations, and Gold Layer**
+
+TP2 extends the pipeline by performing:
+
+- Data cleaning and validation (null handling, type fixing, renaming)
+
+- Transformations such as:
+
+* Feature engineering
+
+* Date parsing and normalization
+
+* Metric calculations
+
+* Writing the processed data into:
+
+* Silver layer (clean and enriched)
+
+* Gold layer (final business-ready aggregates)
+
+* Unified Pipeline
+
+In this implementation, both TP1 and TP2 are executed through a single script:
+```
+python main.py
+```
+
+The script automatically:
+
+Runs the extractions (TP1)
+
+Writes Bronze tables
+
+Cleans, transforms, and enriches the data (TP2)
+
+Produces the Silver and Gold output tables
+
+Prints whether it is writing to local storage or MinIO
+
+This provides a more realistic and production-like workflow while still fulfilling the requirements of both assignments.
