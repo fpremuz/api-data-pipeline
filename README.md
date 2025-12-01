@@ -284,6 +284,12 @@ Although the original assignment separates the work into TP1 and TP2, this repos
 
 **TP1 – Data Extraction and Bronze Layer**
 
+Implemented in:
+
+```
+FranciscoPremuz_ingestion.py
+```
+
 TP1 covers all the ingestion logic, and includes:
 
 - Dynamic extraction (e.g., daily Bitcoin price)
@@ -295,6 +301,12 @@ TP1 covers all the ingestion logic, and includes:
 - Writing raw standardized data into the Bronze Delta Lake layer
 
 **TP2 – Cleaning, Transformations, and Gold Layer**
+
+Implemented in:
+
+```
+FranciscoPremuz_transformations.py
+```
 
 TP2 extends the pipeline by performing:
 
