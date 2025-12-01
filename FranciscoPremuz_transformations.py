@@ -186,6 +186,16 @@ print("\nConstruyendo SILVER para crypto...")
 
 df = df_crypto.copy()
 
+# procesamiento incremental
+df_silver_prev = safe_read_delta(CRYPTO_SILVER_PATH_LOCAL, CRYPTO_SILVER_PATH_S3, storage_options)
+
+if df_silver_prev is not None:
+    max_dt = df_silver_prev["datetime"].max()
+    print(f"Procesando incrementalmente desde {max_dt}...")
+    df = df[df["datetime"] > max_dt]
+else:
+    print("Carga inicial: Se procesará toda la historia de Bronze.")
+
 # Normaliza nombres de columnas
 df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
 
@@ -213,6 +223,8 @@ df = df[df["close"] > 0]
 df["date"] = df["datetime"].dt.date.astype(str)
 df["month"] = df["datetime"].dt.to_period("M").astype(str)
 
+# Control de duplicados antes de escribir (incremental append seguro)
+df = df.drop_duplicates(subset=["datetime"], keep="last")
 
 # ===========================================================
 # ENRIQUECIMIENTO FX 
@@ -243,7 +255,7 @@ if df_fx is not None:
 # GUARDAR SILVER – crypto
 # ===========================================================
 write_delta(df, CRYPTO_SILVER_PATH_LOCAL, CRYPTO_SILVER_PATH_S3,
-            partition_by=["date"], storage_options=storage_options)
+            partition_by=["date"], mode="append", storage_options=storage_options)
 
 print("\n--- SILVER (crypto) ---")
 print(df.head())
@@ -260,8 +272,13 @@ if df_fx is not None:
     df_fx_s = df_fx.copy()
     df_fx_s.columns = [c.strip().lower().replace(" ", "_") for c in df_fx_s.columns]
 
-    write_delta(df_fx_s, FX_SILVER_PATH_LOCAL, FX_SILVER_PATH_S3,
-                storage_options=storage_options)
+    # elimina duplicados por fecha FX
+    if "last_refreshed" in df_fx_s.columns:
+        df_fx_s = df_fx_s.drop_duplicates(subset=["last_refreshed"], keep="last")
+    else:
+        df_fx_s = df_fx_s.drop_duplicates()
+
+    write_delta(df_fx_s, FX_SILVER_PATH_LOCAL, FX_SILVER_PATH_S3, mode="append", storage_options=storage_options)
 
     print("\n--- SILVER (fx) ---")
     print(df_fx_s.head())
@@ -272,14 +289,18 @@ if df_fx is not None:
 # ===========================================================
 print("\nConstruyendo GOLD mensual para crypto...")
 
-df_gold_crypto = df.groupby("month", as_index=False).agg(
+df_silver_crypto = safe_read_delta(CRYPTO_SILVER_PATH_LOCAL, CRYPTO_SILVER_PATH_S3, storage_options)
+
+df_gold_crypto = df_silver_crypto.groupby("month", as_index=False).agg(
     avg_close=("close", "mean"),
     max_close=("close", "max"),
     min_close=("close", "min")
 )
 
-write_delta(df_gold_crypto, CRYPTO_GOLD_PATH_LOCAL, CRYPTO_GOLD_PATH_S3,
-            storage_options=storage_options)
+# Evita duplicados por mes en append
+df_gold_crypto = df_gold_crypto.drop_duplicates(subset=["month"], keep="last")
+
+write_delta(df_gold_crypto, CRYPTO_GOLD_PATH_LOCAL, CRYPTO_GOLD_PATH_S3, mode="append", storage_options=storage_options)
 
 print("\n--- GOLD (crypto mensual) ---")
 print(df_gold_crypto)
@@ -293,8 +314,10 @@ print("\nConstruyendo GOLD para FX (último valor)...")
 if df_fx_s is not None:
     df_fx_gold = df_fx_s.tail(1)
 
-    write_delta(df_fx_gold, FX_GOLD_PATH_LOCAL, FX_GOLD_PATH_S3,
-                storage_options=storage_options)
+    # Asegura que no se duplique la última tasa en el append
+    df_fx_gold = df_fx_gold.drop_duplicates()
+
+    write_delta(df_fx_gold, FX_GOLD_PATH_LOCAL, FX_GOLD_PATH_S3, mode="append", storage_options=storage_options)
 
     print("\n--- GOLD (fx último valor) ---")
     print(df_fx_gold)
