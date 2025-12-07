@@ -247,6 +247,9 @@ if __name__ == "__main__":
     data_dynamic = get_data(base_url, endpoint="", params=params_dynamic)
     if data_dynamic:
         df_dynamic = build_dynamic_table(data_dynamic)
+        df_dynamic["ingestion_timestamp"] = datetime.now()
+        df_dynamic = df_dynamic.dropna(subset=["datetime", "close"])
+        df_dynamic = df_dynamic[df_dynamic["close"] > 0]
         print(df_dynamic.head(), "\n")
 
         data_path_dynamic = f"{bronze_api_path}/digital_currency_daily"
@@ -258,6 +261,7 @@ if __name__ == "__main__":
 
         try:
             dt = DeltaTable(data_path_dynamic, storage_options=storage_options)
+            prev_count = dt.to_pandas().shape[0]
             # Si la tabla ya existe, hago UPSERT (merge)
             data_pa = pa.Table.from_pandas(df_dynamic)
             dt.merge(
@@ -269,7 +273,12 @@ if __name__ == "__main__":
             .when_matched_update_all() \
             .when_not_matched_insert_all() \
             .execute()
+
+            new_count = dt.to_pandas().shape[0]
             print("Tabla Delta actualizada (UPSERT completado).")
+            print(f"Filas antes: {prev_count}")
+            print(f"Filas después: {new_count}")
+            print(f"Filas nuevas insertadas/actualizadas: {new_count - prev_count}")
         except TableNotFoundError:
             write_deltalake(
                 data_path_dynamic,
@@ -310,6 +319,7 @@ if __name__ == "__main__":
     if data_static:
         df_static = build_static_table(data_static)
         df_static = remove_duplicate_columns(df_static)
+        df_static["ingestion_timestamp"] = datetime.now()
         print(df_static.head())   
 
         data_path_static = f"{bronze_api_path}/currency_exchange_rate"
